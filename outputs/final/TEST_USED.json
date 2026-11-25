@@ -1,0 +1,23 @@
+{
+ "used": true,
+ "date": "2026-11-26",
+ "config": {
+  "n_estimators": 300,
+  "min_samples_leaf": 20,
+  "max_features": "sqrt",
+  "class_weight": "balanced_subsample",
+  "change": false
+ },
+ "seeds": [
+  200,
+  201,
+  202,
+  203,
+  204,
+  205,
+  206,
+  207,
+  208,
+  209
+ ]
+}
