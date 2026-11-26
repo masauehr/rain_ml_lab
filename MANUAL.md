@@ -46,6 +46,7 @@ python3 -m venv .venv
 .venv/bin/python src/fetch_wind.py       # data/wind_hourly.csv を作る
 .venv/bin/python src/run_phase6.py       # 2地点法
 .venv/bin/python src/run_phase6b.py      # 三角形法・最小二乗法
+.venv/bin/python src/run_phase7.py       # スキルスコア（基準からどれだけ進んだか）
 ```
 
 結果は `outputs/phase*.md` に出る。`run_phase5.py` は `outputs/final/TEST_USED.json` を作り、以後は拒否する（結果を見て設定を変えないため）。
