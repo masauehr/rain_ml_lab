@@ -54,6 +54,9 @@ python3 -m venv .venv
 .venv/bin/python src/common_labels.py    # 共通地点ラベル（data/daily_labels_common.csv）と年別の陽性日数
 .venv/bin/python src/run_phase9.py       # 設定の調整（2010〜2024年のみ）→ outputs/final_1mm/config.json
 .venv/bin/python src/run_phase10.py      # 2006〜2009年の最終評価。1回だけ（TEST_USED.json があれば拒否）
+# 気象庁の降水の有無の検証との比較（目安）
+.venv/bin/python src/fetch_jma_verif.py  # 気象庁の月別検証（沖縄本島中南部）を data/jma_verif/ に保存
+.venv/bin/python src/jma_compare.py      # → outputs/jma_compare.md
 # 20mm/h 版（同じ手順）
 .venv/bin/python src/run_phase9.py --th 20 --fix-cw-none     # → outputs/phase9_20mm.md・final_20mm/config.json
 .venv/bin/python src/run_phase10.py --th 20 --test-years 2001 2002 2003 2004 2005 2006 2007 2008 2009
