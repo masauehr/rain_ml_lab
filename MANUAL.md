@@ -48,6 +48,12 @@ python3 -m venv .venv
 .venv/bin/python src/run_phase6b.py      # 三角形法・最小二乗法
 .venv/bin/python src/run_phase7.py       # スキルスコア（基準からどれだけ進んだか）
 .venv/bin/python src/run_phase8.py       # 基準を 10mm/h にした場合（参考）
+
+# 1mm/h（雨予報）にやり直し: 2001〜2009年を取得（2009年から遡る。再開可能・data/early/ に保存）
+.venv/bin/python src/fetch_early.py --years 2009 2008 2007 2006 2005 2004 2003 2002 2001 --sleep 0.8
+.venv/bin/python src/common_labels.py    # 共通地点ラベル（data/daily_labels_common.csv）と年別の陽性日数
+.venv/bin/python src/run_phase9.py       # 設定の調整（2010〜2024年のみ）→ outputs/final_1mm/config.json
+.venv/bin/python src/run_phase10.py      # 2006〜2009年の最終評価。1回だけ（TEST_USED.json があれば拒否）
 ```
 
 結果は `outputs/phase*.md` に出る。`run_phase5.py` は `outputs/final/TEST_USED.json` を作り、以後は拒否する（結果を見て設定を変えないため）。

@@ -1,0 +1,31 @@
+{
+  "実行日時": "2026-11-26T13:00:31",
+  "評価期間": [
+    2006,
+    2007,
+    2008,
+    2009
+  ],
+  "設定": {
+    "model": "et",
+    "n_estimators": 300,
+    "min_samples_leaf": 5,
+    "max_features": "sqrt",
+    "class_weight": null,
+    "change": true,
+    "train_all_wind": false,
+    "C": 0.1
+  },
+  "件数": {
+    "naha": {
+      "samples": 1011,
+      "pos_samples": 264,
+      "pos_days": 89
+    },
+    "nago": {
+      "samples": 1069,
+      "pos_samples": 431,
+      "pos_days": 145
+    }
+  }
+}
