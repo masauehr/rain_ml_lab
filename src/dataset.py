@@ -54,6 +54,35 @@ def build(station: str) -> pd.DataFrame:
             f["wind_ok"] = bool(win["wind"].max() < WIND_LIMIT)
             rows.append(f)
     x = pd.DataFrame(rows)
+    # 風の収束量（那覇・名護の2地点の線方向）。t・t-1・t-2 と、6時〜t の平均
+    ct = conv_table()
+    cv = []
+    for date, t in zip(x["date"], x["t"]):
+        try:
+            c = ct.loc[date]
+            win = c.loc[6:t]
+            cv.append({"conv": c.at[t, "conv"], "conv_d1": c.at[t, "conv"] - c.at[t - 1, "conv"],
+                       "conv_d2": c.at[t, "conv"] - c.at[t - 2, "conv"], "conv_mean": win["conv"].mean(),
+                       "cross": c.at[t, "cross"], "spd_diff": c.at[t, "spd_diff"]})
+        except KeyError:
+            cv.append({})
+    x = pd.concat([x, pd.DataFrame(cv)], axis=1)
+    if (BASE / "data" / "wind_hourly.csv").exists():
+        tt = _tri_cached()
+        tv = []
+        for date, t in zip(x["date"], x["t"]):
+            try:
+                c = tt.loc[date]
+                d = {}
+                for k in ("tri_n", "tri_c", "tri_s", "lsq"):
+                    d[f"conv_{k}"] = c.at[t, k]
+                    d[f"conv_{k}_mean"] = c.loc[6:t, k].mean()
+                d["conv_lsq_d1"] = c.at[t, "lsq"] - c.at[t - 1, "lsq"]
+                d["conv_lsq_d2"] = c.at[t, "lsq"] - c.at[t - 2, "lsq"]
+                tv.append(d)
+            except KeyError:
+                tv.append({})
+        x = pd.concat([x, pd.DataFrame(tv)], axis=1)
     lab = pd.read_csv(BASE / "data" / "daily_labels.csv", index_col=0, parse_dates=True)
     for kind in ("local", "region"):
         v = lab[f"{station}_{kind}"]
@@ -73,11 +102,123 @@ def _wdir(s) -> float:
     return _DIR.get(str(s).strip(), np.nan)
 
 
+def _uv(g: pd.DataFrame) -> pd.DataFrame:
+    """風速・風向（16方位、風が吹いてくる向き）から東西成分 u・南北成分 v（m/s）。静穏は 0。判定できない値は NaN"""
+    d = g["wdir"].astype(str).str.replace(r"[)\]*#\s]", "", regex=True)
+    ang = np.deg2rad(d.map(_DIR))
+    u = -g["wind"] * np.sin(ang)
+    v = -g["wind"] * np.cos(ang)
+    calm = d.eq("静穏") | (g["wind"] <= 0.0)
+    return pd.DataFrame({"u": u.mask(calm, 0.0), "v": v.mask(calm, 0.0)}, index=g.index)
+
+
+# 那覇（南端）と名護（北端）を結ぶ線。線方向の単位ベクトルと距離
+_LAT_S, _LON_S, _LAT_N, _LON_N = 26.207, 127.687, 26.593, 127.965
+_DY = (_LAT_N - _LAT_S) * 111.2
+_DX = (_LON_N - _LON_S) * 111.32 * np.cos(np.deg2rad((_LAT_N + _LAT_S) / 2))
+_L = float(np.hypot(_DX, _DY))
+_EX, _EY = _DX / _L, _DY / _L  # 南端（那覇）から北端（名護）へ向かう単位ベクトル
+
+
+def conv_table() -> pd.DataFrame:
+    """那覇・名護の風から、2地点の線方向の収束量（1/s）を (date, hour) ごとに求める。
+    conv = -(北端の線方向風 − 南端の線方向風) / 距離。正なら、線に沿って風が集まる（収束）。
+    cross = 線に直交する成分の差 / 距離（シア。発散ではない）。説明変数は t 以前の値だけで作る（build で選ぶ）"""
+    h = _hourly()
+    parts = {}
+    for st in ("naha", "nago"):
+        g = h[h.station == st].set_index(["date", "hour"]).sort_index()
+        uv = _uv(g)
+        parts[st] = pd.DataFrame({"s": uv.u * _EX + uv.v * _EY, "c": -uv.u * _EY + uv.v * _EX, "spd": g["wind"]})
+    t = pd.DataFrame({"conv": -(parts["nago"].s - parts["naha"].s) / _L * 1e3,  # 単位: 1e-6 /s（(m/s)/km を 1e3 倍。1 が 1e-6 /s）
+                      "cross": (parts["nago"].c - parts["naha"].c) / _L * 1e3,
+                      "spd_diff": parts["nago"].spd - parts["naha"].spd})
+    return t
+
+
+# ---- 三角形法・最小二乗法による収束量（風を観測する沖縄本島のアメダス） ----
+# 緯度・経度は気象庁の観測点一覧（amedastable.json）。(緯度, 経度)
+STATION_LATLON = {"oku": (26.835, 128.272), "nago": (26.593, 127.965), "miyagijima": (26.363, 127.972),
+                  "naha": (26.207, 127.687), "ashimine": (26.193, 127.638), "itokazu": (26.153, 127.765)}
+TRIANGLES = {"tri_n": ("oku", "nago", "miyagijima"),          # 北部〜中部
+             "tri_c": ("nago", "miyagijima", "naha"),         # 中部（南北に長い）
+             "tri_s": ("miyagijima", "itokazu", "naha")}      # 中部〜南部
+LSQ_STATIONS = ("oku", "nago", "miyagijima", "naha", "ashimine", "itokazu")   # 最小二乗は6地点すべて
+_LAT0, _LON0 = 26.5, 127.9
+
+
+def _xy(name: str) -> tuple[float, float]:
+    """地点の位置を、基準点からの東向き x・北向き y（km）にする"""
+    lat, lon = STATION_LATLON[name]
+    return (lon - _LON0) * 111.32 * np.cos(np.deg2rad(_LAT0)), (lat - _LAT0) * 111.2
+
+
+def divergence_fit(xy: np.ndarray, u: np.ndarray, v: np.ndarray) -> tuple[float, float]:
+    """風が空間的に直線（1次式）で変わると仮定し、u = u0 + a x + b y、v = v0 + c x + d y を最小二乗で当てはめる。
+    発散 = a + d、渦度 = c − b（単位: (m/s)/km の 1e3 倍 = 1e-6 /s）。3点なら厳密に解け（三角形法）、4点以上なら最小二乗。
+    風が欠けた地点は除く。有効な点が3つ未満なら NaN"""
+    ok = ~(np.isnan(u) | np.isnan(v))
+    if ok.sum() < 3:
+        return np.nan, np.nan
+    A = np.column_stack([np.ones(ok.sum()), xy[ok, 0], xy[ok, 1]])
+    cu = np.linalg.lstsq(A, u[ok], rcond=None)[0]
+    cv = np.linalg.lstsq(A, v[ok], rcond=None)[0]
+    return (cu[1] + cv[2]) * 1e3, (cv[1] - cu[2]) * 1e3
+
+
+def _wind_all() -> pd.DataFrame:
+    """6地点の風の東西成分 u・南北成分 v を (date, hour) × 地点 で返す（列: (u|v, 地点)）。fetch_wind.py の取得が済んでいること"""
+    h = _hourly()
+    parts = {st: h[h.station == st][["date", "hour", "wind", "wdir"]] for st in ("naha", "nago")}
+    w = pd.read_csv(BASE / "data" / "wind_hourly.csv", dtype={"wdir": str})
+    w["date"] = pd.to_datetime(w["date"])
+    for st in ("oku", "miyagijima", "ashimine", "itokazu"):
+        parts[st] = w[w.station == st][["date", "hour", "wind", "wdir"]]
+    uvs = {}
+    for st, g in parts.items():
+        g = g.set_index(["date", "hour"]).sort_index()
+        g = g[~g.index.duplicated()]
+        uv = _uv(g)
+        uvs[("u", st)], uvs[("v", st)] = uv["u"], uv["v"]
+    return pd.DataFrame(uvs)
+
+
+def tri_table() -> pd.DataFrame:
+    """(date, hour) ごとに、三角形3つと最小二乗（6地点）の「収束量」（= −発散、1e-6 /s）を返す"""
+    uv = _wind_all()
+    out = {k: [] for k in list(TRIANGLES) + ["lsq"]}
+    idx = uv.index
+    xy_all = np.array([_xy(st) for st in LSQ_STATIONS])
+    U = {st: uv[("u", st)].to_numpy() for st in LSQ_STATIONS}
+    V = {st: uv[("v", st)].to_numpy() for st in LSQ_STATIONS}
+    for i in range(len(idx)):
+        for name, sts in TRIANGLES.items():
+            xy = np.array([_xy(st) for st in sts])
+            out[name].append(-divergence_fit(xy, np.array([U[st][i] for st in sts]), np.array([V[st][i] for st in sts]))[0])
+        out["lsq"].append(-divergence_fit(xy_all, np.array([U[st][i] for st in LSQ_STATIONS]), np.array([V[st][i] for st in LSQ_STATIONS]))[0])
+    return pd.DataFrame(out, index=idx)
+
+
 FEATURES_BASE = ["pres", "pres_d1", "pres_d3", "temp", "dew", "dewdep", "humid", "wind", "wdir_sin", "wdir_cos",
                  "rain1", "rain3", "rain6", "rainmax6", "sun_morning", "wind_mean", "wind_max", "t", "month"]
 FEATURES_RAD = ["rad_morning"]  # 那覇のみ
 FEATURES_CHANGE = ["temp_d1", "temp_d2", "temp_rise6", "temp_gap_max", "dew_d1", "dew_d2", "humid_d1", "humid_d2"]
 
 
-def features(station: str, change: bool = True) -> list[str]:
-    return FEATURES_BASE + (FEATURES_RAD if station == "naha" else []) + (FEATURES_CHANGE if change else [])
+_TRI_CACHE = {}
+
+
+def _tri_cached() -> pd.DataFrame:
+    """tri_table は時間がかかるので、同じプロセスでは1回だけ計算する"""
+    if "t" not in _TRI_CACHE:
+        _TRI_CACHE["t"] = tri_table()
+    return _TRI_CACHE["t"]
+
+
+FEATURES_TRI = [f"conv_{k}{m}" for k in ("tri_n", "tri_c", "tri_s", "lsq") for m in ("", "_mean")] + ["conv_lsq_d1", "conv_lsq_d2"]  # 三角形法・最小二乗
+FEATURES_CONV = ["conv", "conv_d1", "conv_d2", "conv_mean", "cross", "spd_diff"]  # 風の収束量（那覇・名護の2地点）
+
+
+def features(station: str, change: bool = True, conv: bool = False, tri: bool = False) -> list[str]:
+    return (FEATURES_BASE + (FEATURES_RAD if station == "naha" else []) + (FEATURES_CHANGE if change else [])
+            + (FEATURES_CONV if conv else []) + (FEATURES_TRI if tri else []))

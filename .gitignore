@@ -5,3 +5,4 @@ data/*.log
 outputs/*.log
 __pycache__/
 .ipynb_checkpoints/
+data/raw_wind/

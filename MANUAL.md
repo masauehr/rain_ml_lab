@@ -2,6 +2,7 @@
 
 午前の観測から午後の大雨を当てる学習プロジェクト（ExtraTrees・RandomForest・ロジスティック回帰の比較）。
 結論は [REPORT.md](REPORT.md)、設計は [PLAN.md](PLAN.md)。
+用語は [GLOSSARY.md](GLOSSARY.md)（初心者向け）、動かして学ぶ Jupyter は [notebooks/README.md](notebooks/README.md)。
 
 ## セットアップ
 
@@ -40,10 +41,21 @@ python3 -m venv .venv
 .venv/bin/python src/run_phase3.py   # 差の95%区間・警戒の出し方・校正（約3分）
 .venv/bin/python src/run_phase4.py   # 特徴量重要度・群ごとの寄与・Platt補正（10〜20分）
 .venv/bin/python src/run_phase5.py   # 2025年の最終評価（1回だけ）
+
+# 追加実験: 風の収束量（先に風の追加データを取得する。約2時間・再開可能）
+.venv/bin/python src/fetch_wind.py       # data/wind_hourly.csv を作る
+.venv/bin/python src/run_phase6.py       # 2地点法
+.venv/bin/python src/run_phase6b.py      # 三角形法・最小二乗法
 ```
 
 結果は `outputs/phase*.md` に出る。`run_phase5.py` は `outputs/final/TEST_USED.json` を作り、以後は拒否する（結果を見て設定を変えないため）。
 新しい検証データで評価し直すときは、`TEST_USED.json` を残したまま、新しい年のデータで別の実行を作る。
+
+## ノートブック（動かして学ぶ）
+
+`notebooks/` に、用語と手法を実データで学ぶ Jupyter が7本ある（00 データ / 01 評価 / 02 木と森 / 03 不確かさ / 04 重要度 / 05 風の収束量 / 06 校正）。
+`.venv/bin/jupyter lab notebooks/` で開く。05 の一部だけ、`data/wind_hourly.csv` が必要。読む順と結果は [notebooks/README.md](notebooks/README.md)。
+コミットするノートは出力を消してある。
 
 ## 設定の要点
 

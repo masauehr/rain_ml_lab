@@ -3,6 +3,7 @@
 **午前の観測から、午後の大雨を当てられるか。** 沖縄本島（那覇・名護）の7〜9月で、`ExtraTreesClassifier` を `RandomForest`・ロジスティック回帰・単純な基準と比べる機械学習の学習プロジェクト。
 
 詳しくは [MANUAL.md](MANUAL.md) / [REPORT.md](REPORT.md) / [PLAN.md](PLAN.md) を参照。
+用語が難しいときは [GLOSSARY.md](GLOSSARY.md)（初心者向けの用語集）、動かして学ぶなら [notebooks/](notebooks/README.md)（Jupyter 7本）へ。
 
 > データは気象庁「過去の気象データ検索」の時別値を加工して作成（出典: 気象庁）。個人データは使っていない。
 
@@ -27,6 +28,10 @@
 | パス | 内容 |
 |---|---|
 | `src/fetch_hourly.py` / `src/fetch_region.py` | 気象庁の時別値の取得（那覇・名護 / 周辺9地点） |
+| `src/fetch_wind.py` | 風の追加取得（奥・宮城島・安次嶺・糸数。収束量の実験用。約2時間） |
+| `src/run_phase6.py` / `run_phase6b.py` | 風の収束量の実験（2地点法 / 三角形法・最小二乗法） |
+| `notebooks/` | 動かして学ぶ Jupyter（用語と手法の解説） |
+| `GLOSSARY.md` | 初心者向けの用語集 |
 | `src/check_stations.py` / `src/region_labels.py` | 降水量の観測地点の検証 / 正解（地点・地域）の集計 |
 | `src/dataset.py` | 説明変数と正解（予測時刻 t までの観測だけ） |
 | `src/run_phase1.py`〜`run_phase5.py` | 基準 → 比較 → 差の確認・しきい値 → 重要度・校正 → 最終評価 |
