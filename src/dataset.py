@@ -86,7 +86,7 @@ def build(station: str) -> pd.DataFrame:
     lab = pd.read_csv(BASE / "data" / "daily_labels.csv", index_col=0, parse_dates=True)
     for kind in ("local", "region"):
         v = lab[f"{station}_{kind}"]
-        for th in (10, 20, 30):
+        for th in (1, 10, 20, 30):
             x[f"y{th}_{kind}"] = x["date"].map(v >= th).astype(int)
     x["year"] = x["date"].dt.year
     x["station"] = station
