@@ -1,0 +1,10 @@
+{
+  "model": "et",
+  "n_estimators": 300,
+  "min_samples_leaf": 1,
+  "max_features": 1.0,
+  "class_weight": null,
+  "change": false,
+  "train_all_wind": false,
+  "C": 0.1
+}

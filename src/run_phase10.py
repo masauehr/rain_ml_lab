@@ -7,6 +7,7 @@
 - 再実行防止: outputs/final_1mm/TEST_USED.json があれば実行しない。
 使い方: .venv/bin/python src/run_phase10.py
 """
+import argparse
 import json
 import sys
 import warnings
@@ -25,6 +26,7 @@ OUT = BASE / "outputs"
 TRAIN_YEARS = list(range(2010, 2025))
 TEST_YEARS = [2006, 2007, 2008, 2009]
 TARGET = "y1_common"
+TAG, LABEL = "1mm", "1mm/h"
 SEEDS = list(range(200, 210))
 NB = 2000
 
@@ -39,15 +41,22 @@ def aps(a, ref):
 
 
 def main() -> None:
-    guard = OUT / "final_1mm" / "TEST_USED.json"
+    global TARGET, TAG, LABEL, TEST_YEARS
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--th", type=int, default=1)
+    ap.add_argument("--test-years", type=int, nargs="+", default=TEST_YEARS)
+    a = ap.parse_args()
+    TARGET, TAG, LABEL, TEST_YEARS = f"y{a.th}_common", f"{a.th}mm", f"{a.th}mm/h", a.test_years
+    ty = f"{min(TEST_YEARS)}〜{max(TEST_YEARS)}年"
+    guard = OUT / f"final_{TAG}" / "TEST_USED.json"
     if guard.exists():
         sys.exit("最終評価は実行済みです（TEST_USED.json）。再実行しません。")
-    cfg = json.loads((OUT / "final_1mm" / "config.json").read_text(encoding="utf-8"))
+    cfg = json.loads((OUT / f"final_{TAG}" / "config.json").read_text(encoding="utf-8"))
     rng = np.random.default_rng(0)
-    L = ["# Phase 10: 1mm/h（雨予報）の最終評価（2006〜2009年）", "",
-         "（`src/run_phase10.py` が自動生成。1回だけ実行。設定は outputs/final_1mm/config.json）", "",
+    L = [f"# Phase 10: {LABEL}の最終評価（{ty}）", "",
+         f"（`src/run_phase10.py` が自動生成。1回だけ実行。設定は outputs/final_{TAG}/config.json）", "",
          f"設定: {cfg}", "",
-         "学習 2010〜2024年（風速10m/s未満）、評価 2006〜2009年（風速10m/s未満）、正解は共通地点ラベル（午後1〜6時に1mm/h以上）。",
+         f"学習 2010〜2024年（風速10m/s未満）、評価 {ty}（風速10m/s未満）、正解は共通地点ラベル（午後1〜6時に{LABEL}以上）。",
          f"ExtraTrees・RandomForest は{len(SEEDS)}シードの予測平均。95%区間は日単位ブートストラップ（{NB}回）。雨量の気候値は基準に使っていない。", ""]
     meta = {}
     for st in ("naha", "nago"):
@@ -102,7 +111,7 @@ def main() -> None:
         print(NAME[st], "完了", flush=True)
     L.append("注: スキル（PR-AUC）は 0 なら基準と同じ、1 なら完璧。Brier スキルの基準は常に陽性率を返す予測。"
              "区間が0を含めば、基準より進んだとは言えない。")
-    (OUT / "phase10.md").write_text("\n".join(L) + "\n", encoding="utf-8")
+    (OUT / ("phase10.md" if TAG == "1mm" else f"phase10_{TAG}.md")).write_text("\n".join(L) + "\n", encoding="utf-8")
     guard.write_text(json.dumps({"実行日時": datetime.now().isoformat(timespec="seconds"), "評価期間": TEST_YEARS,
                                  "設定": cfg, "件数": meta}, ensure_ascii=False, indent=2), encoding="utf-8")
     print("\n".join(L))

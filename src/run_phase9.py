@@ -28,6 +28,8 @@ warnings.filterwarnings("ignore")
 OUT = Path(__file__).resolve().parent.parent / "outputs"
 YEARS = list(range(2010, 2025))
 TARGET = "y1_common"
+TAG = "1mm"          # 出力名の接尾辞（1mm は従来の名前のまま）
+LABEL = "1mm/h"
 NAME = {"naha": "那覇", "nago": "名護"}
 
 BASE = dict(model="et", n_estimators=300, min_samples_leaf=5, max_features="sqrt", class_weight=None, change=False, train_all_wind=False, C=0.1)
@@ -83,16 +85,20 @@ def run(data, cfg, seeds):
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", type=int, default=3)
+    ap.add_argument("--th", type=int, default=1, help="基準（mm/h）: 1 または 20 など")
+    ap.add_argument("--fix-cw-none", action="store_true", help="class_weight は なし に固定（確率の質を保つため。規則で選ばない）")
     a = ap.parse_args()
+    global TARGET, TAG, LABEL
+    TARGET, TAG, LABEL = f"y{a.th}_common", f"{a.th}mm", f"{a.th}mm/h"
     seeds = list(range(100, 100 + a.seeds))
     data = {}
     for st in ("naha", "nago"):
         x = ds.build(st)
         e = (x.year.isin(YEARS) & x.wind_ok).to_numpy()
         data[st] = (x, e, x.loc[e, TARGET].to_numpy())
-    L = ["# Phase 9: 1mm/h（雨予報）向けの設定の調整", "",
+    L = [f"# Phase 9: {LABEL}向けの設定の調整", "",
          "（`src/run_phase9.py` が自動生成。2010〜2024年の leave-one-year-out だけを使用。2025年・2001〜2009年は使っていない）", "",
-         f"正解: 共通地点ラベル（午後1〜6時に1mm/h以上）。評価は風速10m/s未満の標本。{len(seeds)}シードの平均±標準偏差。", ""]
+         f"正解: 共通地点ラベル（午後1〜6時に{LABEL}以上）。評価は風速10m/s未満の標本。{len(seeds)}シードの平均±標準偏差。", ""]
     for st, (x, e, y) in data.items():
         L.append(f"- {NAME[st]}: 標本 {len(y)}、陽性 {int(y.sum())} 標本・{x.loc[e & (x[TARGET] == 1).to_numpy(), 'date'].nunique()} 日、陽性率 {y.mean():.3f}")
     L.append("")
@@ -117,6 +123,9 @@ def main() -> None:
         sd = np.mean([base_res[s]["PR-AUC"][1] for s in base_res])          # 基準のシード間の標準偏差
         best = max(values, key=lambda v: avg[v])
         pick = best if avg[best] - avg[BASE[axis]] > sd else BASE[axis]
+        if axis == "class_weight" and a.fix_cw_none:
+            L += ["", f"（規則では {pick} だが、確率の質を保つため class_weight なしに固定。1mm/h と同じ扱い）"]
+            pick = None
         chosen[axis] = pick
         L += ["", f"→ 選択: **{pick}**（最高 {best} の平均 PR-AUC {avg[best]:.3f}、基準 {avg[BASE[axis]]:.3f}、基準のシード間標準偏差 {sd:.4f}）", ""]
         summary[axis] = {str(k): float(v) for k, v in avg.items()}
@@ -134,9 +143,9 @@ def main() -> None:
         final[name] = r
         L.append(f"| {name} | {r['naha']['PR-AUC'][0]:.3f} | {r['nago']['PR-AUC'][0]:.3f} | {r['naha']['Brierスキル'][0]:+.3f} | {r['nago']['Brierスキル'][0]:+.3f} |")
     L.append("")
-    (OUT / "final_1mm").mkdir(parents=True, exist_ok=True)
-    (OUT / "final_1mm" / "config.json").write_text(json.dumps(chosen, ensure_ascii=False, indent=2), encoding="utf-8")
-    (OUT / "phase9.md").write_text("\n".join(L) + "\n", encoding="utf-8")
+    (OUT / f"final_{TAG}").mkdir(parents=True, exist_ok=True)
+    (OUT / f"final_{TAG}" / "config.json").write_text(json.dumps(chosen, ensure_ascii=False, indent=2), encoding="utf-8")
+    (OUT / ("phase9.md" if TAG == "1mm" else f"phase9_{TAG}.md")).write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L))
 
 
