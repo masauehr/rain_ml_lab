@@ -20,7 +20,6 @@ import run_phase3 as p3
 warnings.filterwarnings("ignore")
 OUT = Path(__file__).resolve().parent.parent / "outputs"
 YEARS = p3.YEARS
-TARGET = p3.TARGET
 NAME = p3.NAME
 NB = 2000
 
@@ -34,12 +33,14 @@ def bss(y: np.ndarray, p: np.ndarray) -> float:
     return 1.0 - brier_score_loss(y, p) / (pbar * (1 - pbar))
 
 
-def main() -> None:
+def main(target: str = "y20_region", outname: str = "phase7.md", title: str = "Phase 7（追加）: スキルスコア", cond: str = "地域の正解 × 20mm/h") -> None:
+    TARGET = target
+    p3.TARGET = target
     rng = np.random.default_rng(0)
-    L = ["# Phase 7（追加）: スキルスコア", "",
+    L = [f"# {title}", "",
          "（`src/run_phase7.py` が自動生成。2010〜2024年の leave-one-year-out、10シード平均の予測。2025年は使っていない）", "",
          "スキルスコア = (モデル − 基準) ÷ (完璧 − 基準)。0 なら基準と同じ、1 なら完璧、負なら基準より悪い。",
-         "地域の正解 × 20mm/h、風速10m/s未満の標本。95%区間は日単位ブートストラップ（2000回）。雨量の気候値は基準に使っていない。", ""]
+         f"{cond}、風速10m/s未満の標本。95%区間は日単位ブートストラップ（2000回）。雨量の気候値は基準に使っていない。", ""]
     for st in ("naha", "nago"):
         x = ds.build(st)
         e = (x.year.isin(YEARS) & x.wind_ok).to_numpy()
@@ -85,7 +86,7 @@ def main() -> None:
         print(NAME[st], "完了", flush=True)
     L += ["注: PR-AUC のスキルスコアは、完璧が 1 で基準から遠いため、まれな事象では値が小さく出る。"
           "「0を上回った割合」が高く、区間が0を含まなければ、基準より進んだと言える。"]
-    (OUT / "phase7.md").write_text("\n".join(L) + "\n", encoding="utf-8")
+    (OUT / outname).write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L))
 
 
