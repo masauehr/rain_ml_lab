@@ -14,16 +14,21 @@ TIMES = (10, 11, 12)
 WIND_LIMIT = 10.0  # 台風の除外: 当日6時〜t の最大風速がこれ以上の標本は学習に使わない
 
 
-def _hourly() -> pd.DataFrame:
+def _hourly(early: bool = False) -> pd.DataFrame:
+    """時別値。early=True なら、2001〜2009年（data/early/）も含める（既定は2010〜2025年だけ）"""
     d = pd.read_csv(BASE / "data" / "hourly.csv", parse_dates=["time"])
+    if early:
+        fs = sorted((BASE / "data" / "early").glob("hourly_*.csv"))
+        d = pd.concat([d] + [pd.read_csv(f, parse_dates=["time"]) for f in fs], ignore_index=True)
     d["hour"] = d["time"].dt.hour.replace(0, 24)
     d["date"] = (d["time"] - pd.Timedelta(minutes=1)).dt.normalize()
     return d
 
 
-def build(station: str) -> pd.DataFrame:
-    """1地点の標本表を返す。列: date, t, 説明変数..., y30_local など, wind_ok"""
-    d = _hourly()
+def build(station: str, early: bool = False) -> pd.DataFrame:
+    """1地点の標本表を返す。列: date, t, 説明変数..., y30_local など, wind_ok。
+    early=True なら 2001〜2009年も含める（その年の local/region ラベルは NaN。共通地点ラベル y*_common を使う）"""
+    d = _hourly(early)
     d = d[d.station == station].set_index(["date", "hour"]).sort_index()
     rows = []
     for date, g in d.groupby(level=0):
@@ -87,7 +92,15 @@ def build(station: str) -> pd.DataFrame:
     for kind in ("local", "region"):
         v = lab[f"{station}_{kind}"]
         for th in (1, 10, 20, 30):
-            x[f"y{th}_{kind}"] = x["date"].map(v >= th).astype(int)
+            m = x["date"].map(v >= th)
+            x[f"y{th}_{kind}"] = m.astype(int) if m.notna().all() else m.astype(float)   # 2001〜2009年は NaN（v1 の定義では作れない）
+    cf = BASE / "data" / "daily_labels_common.csv"
+    if cf.exists():  # 共通地点ラベル（全期間で観測している地点だけ）
+        cl = pd.read_csv(cf, index_col=0, parse_dates=True)[f"{station}_common"]
+        for th in (1, 10, 20, 30):
+            m = x["date"].map(cl.notna() & (cl >= th)).astype(float)
+            m[x["date"].map(cl).isna()] = np.nan
+            x[f"y{th}_common"] = m.astype(int) if m.notna().all() else m
     x["year"] = x["date"].dt.year
     x["station"] = station
     return x
